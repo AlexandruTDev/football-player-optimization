@@ -23,19 +23,19 @@ var/
 # Jupyter Notebooks
 .ipynb_checkpoints
 
-# Dataset files
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
+# # Dataset files
+# data/raw/*
+# data/processed/*
+# !data/raw/.gitkeep
+# !data/processed/.gitkeep
 
-# Model files
-models/*
-!models/.gitkeep
+# # Model files
+# models/*
+# !models/.gitkeep
 
-# Visualization outputs
-visualizations/*
-!visualizations/.gitkeep
+# # Visualization outputs
+# visualizations/*
+# !visualizations/.gitkeep
 
 # Environment
 .env
