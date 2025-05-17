@@ -1,3 +1,7 @@
+import numpy as np
+import pandas as pd
+
+
 class InsightGenerator:
     """Class responsible for generating player insights."""
     
