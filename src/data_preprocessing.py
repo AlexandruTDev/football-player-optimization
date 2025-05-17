@@ -1,6 +1,8 @@
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
-from turtle import pd
+
+import numpy as np
+import pandas as pd
 
 
 class DataPreprocessor:
