@@ -28,6 +28,9 @@ class DataPreprocessor:
         if len(player_data) < 5:  # Skip players with insufficient data
             return None
             
+        # Reset index to avoid any issues with duplicate indices
+        player_data = player_data.reset_index(drop=True)
+            
         # Sort data by date
         player_data = player_data.sort_values('Date')
         
@@ -38,35 +41,58 @@ class DataPreprocessor:
         training_data = player_data[player_data['Session_Type'] == 'training']
         
         if not training_data.empty:
-            # Calculate acute load (7-day) - training only
-            player_data['Training_Acute_Load'] = training_data.set_index('Date')['Player Load'].rolling(
-                window=self.acute_window, min_periods=1).sum().reindex(player_data['Date']).fillna(method='ffill')
+            # Handle possible duplicate dates by creating a new unique column
+            # Combine date and a sequential counter to ensure uniqueness
+            temp_training = training_data.copy().reset_index(drop=True)
+            temp_training['Date_Unique'] = [f"{d}_{i}" for i, d in enumerate(temp_training['Date'])]
+            temp_training_indexed = temp_training.set_index('Date')
             
-            # Calculate chronic load (28-day) - training only
-            player_data['Training_Chronic_Load'] = training_data.set_index('Date')['Player Load'].rolling(
-                window=self.chronic_window, min_periods=1).sum().reindex(player_data['Date']).fillna(method='ffill')
+            # Calculate rolling values without reindexing
+            acute_load = temp_training_indexed['Player Load'].rolling(window=self.acute_window, min_periods=1).sum()
+            chronic_load = temp_training_indexed['Player Load'].rolling(window=self.chronic_window, min_periods=1).sum()
+            
+            # Map values back to original dataframe using the row positions
+            player_data['Training_Acute_Load'] = np.nan
+            player_data['Training_Chronic_Load'] = np.nan
+            
+            # Assign calculated values back to training rows
+            for i, idx in enumerate(training_data.index):
+                if i < len(acute_load):
+                    player_data.loc[idx, 'Training_Acute_Load'] = acute_load.iloc[i]
+                    player_data.loc[idx, 'Training_Chronic_Load'] = chronic_load.iloc[i]
+            
+            # Forward fill for non-training sessions
+            player_data['Training_Acute_Load'] = player_data['Training_Acute_Load'].fillna(method='ffill')
+            player_data['Training_Chronic_Load'] = player_data['Training_Chronic_Load'].fillna(method='ffill')
             
             # Calculate ACWR for training
             player_data['Training_ACWR'] = player_data['Training_Acute_Load'] / player_data['Training_Chronic_Load'].replace(0, np.nan)
             player_data['Training_ACWR'] = player_data['Training_ACWR'].fillna(1)
         
         # Calculate overall load metrics (all sessions)
-        date_indexed = player_data.set_index('Date')
+        # Create temporary series for calculations that doesn't depend on Date as index
+        temp_series = player_data['Player Load'].copy().reset_index(drop=True)
         
-        # Calculate acute load (7-day) - all sessions
-        player_data['Acute_Load'] = date_indexed['Player Load'].rolling(window=self.acute_window, min_periods=1).sum().reset_index(drop=True)
+        # Calculate rolling values directly on the Series
+        acute_load = temp_series.rolling(window=7, min_periods=1).sum()  # Use 7 days for acute
+        chronic_load = temp_series.rolling(window=28, min_periods=1).sum()  # Use 28 days for chronic
         
-        # Calculate chronic load (28-day) - all sessions
-        player_data['Chronic_Load'] = date_indexed['Player Load'].rolling(window=self.chronic_window, min_periods=1).sum().reset_index(drop=True)
+        # Assign calculated values directly
+        player_data['Acute_Load'] = acute_load.values
+        player_data['Chronic_Load'] = chronic_load.values
         
         # Calculate ACWR for all sessions
         player_data['ACWR'] = player_data['Acute_Load'] / player_data['Chronic_Load'].replace(0, np.nan)
         player_data['ACWR'] = player_data['ACWR'].fillna(1)
         
-        # Calculate load monotony and strain
-        player_data['Load_Monotony'] = date_indexed['Player Load'].rolling(window=self.acute_window, min_periods=1).std() / \
-                                     date_indexed['Player Load'].rolling(window=self.acute_window, min_periods=1).mean()
-        player_data['Load_Monotony'] = player_data['Load_Monotony'].reset_index(drop=True).fillna(0)
+        # Calculate load monotony and strain using non-indexed data
+        temp_series = player_data['Player Load'].copy().reset_index(drop=True)
+        std_series = temp_series.rolling(window=7, min_periods=1).std()
+        mean_series = temp_series.rolling(window=7, min_periods=1).mean()
+        
+        # Calculate monotony safely avoiding division by zero
+        load_monotony = std_series / mean_series
+        player_data['Load_Monotony'] = load_monotony.fillna(0).replace([np.inf, -np.inf], 0).values
         player_data['Load_Strain'] = player_data['Player Load'] * player_data['Load_Monotony']
         
         # Create high-intensity action metrics
@@ -154,6 +180,8 @@ class DataPreprocessor:
                 player_data = data[data['Player Name'] == player]
                 processed_player_data = self._process_player_data(player_data)
                 if processed_player_data is not None:
+                    # Ensure the DataFrame has no index issues before appending
+                    processed_player_data = processed_player_data.reset_index(drop=True)
                     processed_data.append(processed_player_data)
         else:
             # For larger datasets, use parallel processing
@@ -168,9 +196,20 @@ class DataPreprocessor:
                 for future in futures:
                     result = future.result()
                     if result is not None:
+                        # Ensure the DataFrame has no index issues before appending
+                        result = result.reset_index(drop=True)
                         processed_data.append(result)
         
         if processed_data:
-            return pd.concat(processed_data, ignore_index=True)
+            # Make sure all DataFrames have proper indices before concatenation
+            safe_concat_data = []
+            for df in processed_data:
+                # Check for duplicate indices and reset if found
+                if df.index.duplicated().any():
+                    df = df.reset_index(drop=True)
+                safe_concat_data.append(df)
+            
+            # Use ignore_index=True to completely avoid index-related issues
+            return pd.concat(safe_concat_data, ignore_index=True)
         else:
             return pd.DataFrame()  # Return empty DataFrame if no players had sufficient data
