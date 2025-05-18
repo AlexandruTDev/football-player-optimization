@@ -3,7 +3,7 @@ import pandas as pd
 def load_and_prepare_data(filepath):
     """Load and prepare the raw data for analysis."""
     data = pd.read_csv(filepath)
-    
+
     # Check for required columns
     required_columns = ['Date', 'Player Name', 'Tags', 'Player Load', 'Distance Per Min (m/min)']
     missing_columns = [col for col in required_columns if col not in data.columns]

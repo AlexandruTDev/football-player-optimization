@@ -19,7 +19,7 @@ class InsightGenerator:
             return {"error": f"No data found for player {player_name}"}
             
         # Determine latest session type
-        latest_session = player_data.sort_values('Date').iloc[-1]
+        latest_session = player_data.sort_values('Date', key=lambda x: pd.to_datetime(x, format='%m/%d/%Y')).iloc[-1]
         session_type = latest_session['Session_Type']
         
         insights = {
@@ -86,16 +86,9 @@ class InsightGenerator:
             features = model_info['features']
             
             # Ensure all features are available and handle missing values
-            feature_data = latest_session[features].values.reshape(1, -1) if all(f in latest_session for f in features) else None
+            feature_data = pd.DataFrame([latest_session[features].values], columns=features) if all(f in latest_session for f in features) else None
             
-            # Add these print statements
-            print(f"Features: {features}")
-            print(f"Type of feature_data: {type(feature_data)}")
-            if feature_data is not None:
-                print(f"feature_data content: {feature_data}")
-                print(f"feature_data dtype: {feature_data.dtype}")
-
-            if feature_data is not None and not np.isnan(feature_data).any():
+            if feature_data is not None and not feature_data.isnull().values.any():
                 fatigue_risk = model.predict_proba(feature_data)[0][1]  # Probability of performance drop
                 insights['fatigue_prediction'] = {
                     'risk_score': fatigue_risk * 100,

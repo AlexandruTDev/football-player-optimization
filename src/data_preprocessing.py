@@ -62,8 +62,8 @@ class DataPreprocessor:
                     player_data.loc[idx, 'Training_Chronic_Load'] = chronic_load.iloc[i]
             
             # Forward fill for non-training sessions
-            player_data['Training_Acute_Load'] = player_data['Training_Acute_Load'].fillna(method='ffill')
-            player_data['Training_Chronic_Load'] = player_data['Training_Chronic_Load'].fillna(method='ffill')
+            player_data['Training_Acute_Load'] = player_data['Training_Acute_Load'].ffill()
+            player_data['Training_Chronic_Load'] = player_data['Training_Chronic_Load'].ffill()
             
             # Calculate ACWR for training
             player_data['Training_ACWR'] = player_data['Training_Acute_Load'] / player_data['Training_Chronic_Load'].replace(0, np.nan)
@@ -168,7 +168,7 @@ class DataPreprocessor:
         data = data.copy()
         
         # Convert date format
-        data['Date'] = pd.to_datetime(data['Date'])
+        data['Date'] = pd.to_datetime(data['Date'], unit='D', origin='1899-12-30')
         
         # Process each player's data separately, potentially in parallel
         players = data['Player Name'].unique()

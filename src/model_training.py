@@ -2,11 +2,11 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score
-from sklearn.discriminant_analysis import StandardScaler
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import GridSearchCV, GroupKFold, train_test_split
+from sklearn.metrics import classification_report, roc_auc_score
 
 
 class ModelTrainer:
@@ -17,7 +17,6 @@ class ModelTrainer:
         self.load_models = {}  # Player-specific models for optimal load
         self.fatigue_models = {'match': {}, 'training': {}}  # Separate models for match/training
         self.taper_models = {}  # Player-specific models for tapering strategies
-        self.scaler = StandardScaler()
         self.session_types = ['match', 'training']
         
     def identify_optimal_load_zones(self, data, performance_metrics=['Distance Per Min (m/min)', 'Sprints Per Min', 'Power Score (w/kg)']):
@@ -173,7 +172,14 @@ class ModelTrainer:
             best_model.fit(X_train, y_train)
             y_pred = best_model.predict(X_test)
             accuracy = accuracy_score(y_test, y_pred)
-            
+
+            report = classification_report(y_test, y_pred, output_dict=True)
+            # Calculate AUC only if both classes are present in y_test
+            if len(y_test.unique()) > 1:
+                auc = roc_auc_score(y_test, best_model.predict_proba(X_test)[:, 1])
+            else:
+                auc = None  # Or np.nan
+
             # Get feature importances
             result = permutation_importance(best_model, X_test, y_test, n_repeats=10, random_state=42)
             feature_importance = {features[i]: result.importances_mean[i] for i in range(len(features))}
@@ -188,7 +194,9 @@ class ModelTrainer:
                 'features': features,
                 'best_params': best_params,
                 'feature_importance': feature_importance,
-                'confusion_matrix': cm
+                'confusion_matrix': cm,
+                'classification_report': report,
+                'auc_score': auc
             }
         else:
             # Simple train/test split for smaller datasets
@@ -196,7 +204,14 @@ class ModelTrainer:
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             accuracy = accuracy_score(y_test, y_pred)
-            
+
+            report = classification_report(y_test, y_pred, output_dict=True)
+            # Calculate AUC only if both classes are present in y_test
+            if len(y_test.unique()) > 1:
+                auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+            else:
+                auc = None  # Or np.nan
+
             if accuracy > 0.6:  # Only keep reasonably accurate models
                 # Get feature importances
                 result = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42)
@@ -207,7 +222,9 @@ class ModelTrainer:
                     'accuracy': accuracy,
                     'features': features,
                     'feature_importance': feature_importance,
-                    'confusion_matrix': confusion_matrix(y_test, y_pred)
+                    'confusion_matrix': confusion_matrix(y_test, y_pred),
+                    'classification_report': report,
+                    'auc_score': auc
                 }
             
         return None
