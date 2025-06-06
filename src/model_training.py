@@ -1,12 +1,14 @@
 from datetime import timedelta
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 import pandas as pd
-from sklearn.metrics import accuracy_score
-from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.inspection import permutation_importance
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import GridSearchCV, GroupKFold, train_test_split
+from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, confusion_matrix
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.inspection import permutation_importance # Keep if needed elsewhere, otherwise remove
+from sklearn.metrics import confusion_matrix # Keep if needed elsewhere, otherwise remove
+from sklearn.model_selection import GridSearchCV, GroupKFold, train_test_split, cross_val_score
 from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.neural_network import MLPClassifier
 
 
 class ModelTrainer:
@@ -103,132 +105,120 @@ class ModelTrainer:
                 
         return optimal_zones
 
-    def _train_player_fatigue_model(self, player, player_data, session_type):
-        """Train fatigue model for a specific player and session type."""
-        type_data = player_data[player_data['Session_Type'] == session_type].sort_values('Date')
+    def _train_player_fatigue_model(self, data, session_type):
+        """Enhanced fatigue prediction with multiple model comparison and better evaluation"""
         
-        if len(type_data) < 20:  # Need sufficient data
-            return None
-            
-        # Define features for fatigue prediction
-        features = ['ACWR', 'Load_Monotony', 'Load_Strain', 'High_Speed_Distance', 
-                    'High_Accel_Count', 'High_Decel_Count', 'High_Impact_Count',
-                    'Days_Since_Match']
+        players = data['Player Name'].unique()
         
-        if session_type == 'training':
-            # Add training-specific features
-            features.extend(['Training_ACWR', 'Days_Until_Match'])
+        # Train separate models for match and training fatigue
+        self.fatigue_models[session_type] = {}
         
-        # Keep only features that exist in the data
-        features = [f for f in features if f in type_data.columns]
-        
-        if not features:
-            return None
-            
-        # Target: Speed decline in next session of same type
-        target_col = f'{session_type.capitalize()}_Speed_Decline'
-        if target_col not in type_data.columns:
-            return None
-            
-        type_data[f'Next_{target_col}'] = type_data[target_col].shift(-1)
-        type_data['Performance_Drop'] = (type_data[f'Next_{target_col}'] < -0.05).astype(int)
-        
-        # Prepare training data
-        X = type_data[features].dropna()
-        y = type_data['Performance_Drop'].loc[X.index].dropna()
-        
-        # Make sure X and y have same indices
-        common_idx = X.index.intersection(y.index)
-        X = X.loc[common_idx]
-        y = y.loc[common_idx]
-        
-        if len(X) < 15:  # Not enough samples after cleaning
-            return None
-            
-        # Define hyperparameter grid
-        param_grid = {
-            'n_estimators': [50, 100, 200],
-            'max_depth': [3, 5, 7],
-            'learning_rate': [0.01, 0.05, 0.1]
-        }
-        
-        # Train fatigue prediction model with hyperparameter tuning
-        model = GradientBoostingClassifier(random_state=42)
-        
-        # Use cross-validation if enough data
-        if len(X) >= 30:
-            # Create temporal splits to preserve time-series nature
-            cv = GroupKFold(n_splits=min(5, len(X) // 6))
-            time_groups = np.arange(len(X)) // 6  # Approximating time periods
-            
-            grid_search = GridSearchCV(model, param_grid, cv=cv, scoring='accuracy')
-            grid_search.fit(X, y, groups=time_groups)
-            best_model = grid_search.best_estimator_
-            best_params = grid_search.best_params_
-            cv_accuracy = grid_search.best_score_
-            
-            # Final evaluation
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-            best_model.fit(X_train, y_train)
-            y_pred = best_model.predict(X_test)
-            accuracy = accuracy_score(y_test, y_pred)
+        # Train a separate model for each player and session type
+        for player in players:
+            player_data = data[data['Player Name'] == player].sort_values('Date').copy() # Use copy to avoid SettingWithCopyWarning
+            type_data = player_data[player_data['Session_Type'] == session_type].copy() # Use copy
+            if len(type_data) < 20:  # Need sufficient data
+                continue
 
-            report = classification_report(y_test, y_pred, output_dict=True)
-            # Calculate AUC only if both classes are present in y_test
-            if len(y_test.unique()) > 1:
-                auc = roc_auc_score(y_test, best_model.predict_proba(X_test)[:, 1])
-            else:
-                auc = None  # Or np.nan
+            # Define features for fatigue prediction
+            features = ['ACWR', 'Load_Monotony', 'Load_Strain', 'High_Speed_Distance', 
+                        'High_Accel_Count', 'High_Decel_Count', 'High_Impact_Count',
+                        'Days_Since_Match']
+            
+            if session_type == 'training':
+                # Add training-specific features
+                features.extend(['Training_ACWR', 'Days_Until_Match'])
+            
+            # Target: Speed decline in next session of same type
+            target_col = f'{session_type.capitalize()}_Speed_Decline'
+            if target_col not in type_data.columns:
+                continue
 
-            # Get feature importances
-            result = permutation_importance(best_model, X_test, y_test, n_repeats=10, random_state=42)
-            feature_importance = {features[i]: result.importances_mean[i] for i in range(len(features))}
+            type_data[f'Next_{session_type.capitalize()}_Speed_Decline'] = type_data[f'{session_type.capitalize()}_Speed_Decline'].shift(-1)
+            type_data['Performance_Drop'] = (type_data[f'Next_{session_type.capitalize()}_Speed_Decline'] < -0.05).astype(int)
             
-            # Create confusion matrix
-            cm = confusion_matrix(y_test, y_pred)
+            # Prepare training data
+            X = type_data[features].dropna()
+            y = type_data['Performance_Drop'].loc[X.index].dropna()
             
-            return {
-                'model': best_model,
-                'accuracy': accuracy,
-                'cv_accuracy': cv_accuracy,
-                'features': features,
-                'best_params': best_params,
-                'feature_importance': feature_importance,
-                'confusion_matrix': cm,
-                'classification_report': report,
-                'auc_score': auc
+            # Make sure X and y have same indices
+            common_idx = X.index.intersection(y.index)
+            X = X.loc[common_idx]
+            y = y.loc[common_idx]
+            
+            if len(X) < 15:  # Not enough samples after cleaning
+                continue
+            
+            # Scale the features
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+
+            # Define models to compare
+            models = {
+                'RandomForest': RandomForestClassifier(n_estimators=100, random_state=42),
+                'GradientBoosting': GradientBoostingClassifier(random_state=42),
+                'NeuralNetwork': MLPClassifier(hidden_layer_sizes=(50,20), max_iter=1000, random_state=42)
             }
-        else:
-            # Simple train/test split for smaller datasets
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-            model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
-            accuracy = accuracy_score(y_test, y_pred)
-
-            report = classification_report(y_test, y_pred, output_dict=True)
-            # Calculate AUC only if both classes are present in y_test
-            if len(y_test.unique()) > 1:
-                auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
-            else:
-                auc = None  # Or np.nan
-
-            if accuracy > 0.6:  # Only keep reasonably accurate models
-                # Get feature importances
-                result = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42)
-                feature_importance = {features[i]: result.importances_mean[i] for i in range(len(features))}
-                                
-                return {
-                    'model': model,
-                    'accuracy': accuracy,
-                    'features': features,
-                    'feature_importance': feature_importance,
-                    'confusion_matrix': confusion_matrix(y_test, y_pred),
-                    'classification_report': report,
-                    'auc_score': auc
-                }
             
-        return None
+            # Use GroupKFold to prevent data leakage due to time-series nature
+            groups = type_data.loc[common_idx]['Date'].dt.strftime('%Y-%m')  # Group by month
+            
+            best_model = None
+            best_score = 0
+            best_model_name = None
+            
+            for name, model in models.items():
+                # Cross-validation with GroupKFold to respect time order
+                if len(np.unique(y)) < 2:
+                    # Skip cross-validation if only one class is present in the target
+                    avg_score = 0
+                else:
+                    if len(np.unique(groups)) >= 3:  # Need at least 3 time periods for cross-validation
+                        cv = GroupKFold(n_splits=min(3, len(np.unique(groups))))
+                        try:
+                            scores = cross_val_score(model, X_scaled, y, cv=cv, scoring='roc_auc', groups=groups)
+                        except ValueError:
+                            # Handle case where a fold has only one class
+                            scores = [0] # Assign a low score
+                        avg_score = np.mean(scores)
+                    
+                    if avg_score > best_score:
+                        best_score = avg_score
+                        best_model_name = name
+                        best_model = model
+        
+            if best_model is not None and best_score > 0.65:  # Higher threshold for model quality
+                # Retrain on full dataset
+                if len(np.unique(y)) >= 2:
+                    # Calculate confusion matrix before fitting again (optional, but good practice)
+                    # y_pred = best_model.predict(X_scaled) # Prediction before potential re-fitting
+                    # cm = confusion_matrix(y, y_pred) # CM before potential re-fitting
+
+                    best_model.fit(X_scaled, y)
+
+                    y_pred = best_model.predict(X_scaled) # Prediction after re-fitting
+                    cm = confusion_matrix(y, y_pred)
+
+                    best_model.fit(X_scaled, y)
+                else:
+                    best_model = None # Cannot train a meaningful model with only one class
                 
+                # Calculate feature importances if available
+                if hasattr(best_model, 'feature_importances_'):
+                    importances = best_model.feature_importances_
+                    feature_importance = dict(zip(features, importances))
+                else:
+                    feature_importance = None
+                
+                self.fatigue_models[session_type][player] = {
+                    'model': best_model,
+                    'model_type': best_model_name,
+                    'auc_score': best_score,
+                    'confusion_matrix': cm.tolist() if 'cm' in locals() else None, # Store as list
+ 'features': features,
+                    'feature_importance': feature_importance
+                }
+
     def train_fatigue_prediction_model(self, data):
         """Train models to predict performance declines based on accumulated fatigue."""
         players = data['Player Name'].unique()
@@ -236,15 +226,10 @@ class ModelTrainer:
         # Train separate models for match and training fatigue
         for session_type in self.session_types:
             self.fatigue_models[session_type] = {}
-            
-            # Train a separate model for each player and session type
-            for player in players:
-                player_data = data[data['Player Name'] == player]
-                model_info = self._train_player_fatigue_model(player, player_data, session_type)
-                
-                if model_info is not None:
-                    self.fatigue_models[session_type][player] = model_info
-    
+
+            # The _train_player_fatigue_model function now handles player iteration
+            self._train_player_fatigue_model(data, session_type)
+
     def develop_tapering_strategies(self, data):
         """Develop personalized tapering strategies before matches."""
         players = data['Player Name'].unique()

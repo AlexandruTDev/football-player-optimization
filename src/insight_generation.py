@@ -93,9 +93,17 @@ class InsightGenerator:
                 insights['fatigue_prediction'] = {
                     'risk_score': fatigue_risk * 100,
                     'interpretation': 'HIGH RISK' if fatigue_risk > 0.7 else 'MODERATE RISK' if fatigue_risk > 0.3 else 'LOW RISK',
-                    'confidence': model_info['accuracy'] * 100,
+                    'confidence': model_info['auc_score'] * 100,
                     'key_factors': self._get_key_fatigue_factors(model_info, latest_session)
                 }
+
+                # Add confusion matrix details if available
+                if 'confusion_matrix' in model_info:
+                    cm = model_info['confusion_matrix']
+                    if len(cm) == 2 and len(cm[0]) == 2 and len(cm[1]) == 2:
+                        # Assuming confusion matrix is [[TN, FP], [FN, TP]]
+                        insights['fatigue_prediction']['confusion_matrix_counts'] = {'TN': cm[0][0], 'FP': cm[0][1], 'FN': cm[1][0], 'TP': cm[1][1]}
+
         
 
         # Get tapering strategy if available and near a match
@@ -129,7 +137,7 @@ class InsightGenerator:
     
     def _get_key_fatigue_factors(self, model_info, latest_session):
         """Extract key factors contributing to fatigue prediction."""
-        if 'feature_importance' not in model_info:
+        if 'feature_importance' not in model_info or model_info['feature_importance'] is None:
             return []
             
         # Get top 3 most important features
