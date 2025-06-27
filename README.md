@@ -13,7 +13,7 @@
       * The prediction algortihms have been selected in order to compare results based on their general performance metrics for certain jobs.
     * Create visuals based on available data
       * These can be found in the designated visualisations folder of the project
-    * Code base has been developed in PyCharm & FirebaseStudio using AI tools for refinment and suggestions (Calude AI - Sonet 4.0 & Gemini 2.5 Flash)
+    * Code base has been developed in PyCharm & FirebaseStudio using AI tools for refinment and suggestions (Claude AI - Sonet 4.0 & Gemini 2.5 Flash)
  
   # Running the project:
     * Import github project into IDE
