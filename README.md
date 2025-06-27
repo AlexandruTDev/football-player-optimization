@@ -17,5 +17,13 @@
  
   # Running the project:
     * Import github project into IDE
-    * Run terminal command:
-      * 
+    * Create temporary work environment by running following command into terminal:
+      * nix-shell dev.nix
+    * Run project pipeline in order to process raw data, train models and generate associated viusal files
+      * python src/run_pipeline.py --data data/raw/report_export.csv
+
+  # Roadmap:
+    * Split available data into training & test data
+    * Evaluate Machine Learning Model based on confussion matrix
+    * Optimise module based on results
+    * Extend model capacity to predicting best attacking patterns for a team
