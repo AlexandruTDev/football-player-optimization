@@ -2,11 +2,20 @@
 
 * Machine Learning algortihm that calculates and predicts players injury risk based on data gathered in matches and training
 
-  # Project structure
+  # Project structure:
     * The ML module uses raw data from the data/raw folder (in csv format)
-    * The raw data contains entries gathhered from Catapult
+      * The raw data contains entries gathhered from Catapult
+    * Generated visuals can be found in visualisations folder
+      * Injury risk maps & Confussion matrix 
 
   # Current project status:
-    * Able to parse raw data and train ML models using various prediction algorithms 
+    * Able to parse raw data and train ML models using various prediction algorithms (RandomForestClassifier, GradientBoosting & NeuralNetwork -> MLPClassifier)
+      * The prediction algortihms have been selected in order to compare results based on their general performance metrics for certain jobs.
     * Create visuals based on available data
       * These can be found in the designated visualisations folder of the project
+    * Code base has been developed in PyCharm & FirebaseStudio using AI tools for refinment and suggestions (Calude AI - Sonet 4.0 & Gemini 2.5 Flash)
+ 
+  # Running the project:
+    * Import github project into IDE
+    * Run terminal command:
+      * 
