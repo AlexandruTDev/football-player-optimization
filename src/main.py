@@ -3,10 +3,10 @@ import joblib
 from matplotlib import pyplot as plt
 import numpy as np
 
-from dashboard_generation import DashboardGenerator
-from data_preprocessing import DataPreprocessor
-from insight_generation import InsightGenerator
-from model_training import ModelTrainer
+from .dashboard_generation import DashboardGenerator
+from .data_preprocessing import DataPreprocessor
+from .insight_generation import InsightGenerator
+from .model_training import ModelTrainer
 
 
 class PlayerPerformanceOptimizer:

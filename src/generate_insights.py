@@ -2,8 +2,8 @@ import os
 
 from matplotlib import pyplot as plt
 
-from main import PlayerPerformanceOptimizer
-from prepare_data import load_and_prepare_data
+from .main import PlayerPerformanceOptimizer
+from .prepare_data import load_and_prepare_data
 
 def generate_insights(model_path="models/player_optimization_model.joblib", 
                      new_data_path="data/raw/new_data.csv",

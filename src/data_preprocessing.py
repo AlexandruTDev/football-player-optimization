@@ -3,6 +3,7 @@ import multiprocessing
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
 class DataPreprocessor:
@@ -213,3 +214,20 @@ class DataPreprocessor:
             return pd.concat(safe_concat_data, ignore_index=True)
         else:
             return pd.DataFrame()  # Return empty DataFrame if no players had sufficient data
+
+
+def split_data(df, test_size=0.2, random_state=42):
+    """
+    Splits the input DataFrame into training and testing sets.
+    """
+    train_df, test_df = train_test_split(df, test_size=test_size, random_state=random_state)
+    return train_df, test_df
+
+def preprocess_for_training(X_train, X_test):
+    """
+    Placeholder function for data preprocessing steps before model training.
+    This can include feature scaling, handling missing values, etc.
+    Currently, it returns the input data unchanged.
+    """
+    # Add your data preprocessing logic here
+    return X_train, X_test
